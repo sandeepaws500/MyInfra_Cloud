@@ -197,6 +197,25 @@ Resources:
         - Key: Name
           Value: MyInfraWebServer1
 
+#Creating volume to MyInfraWebServer1 instance
+  MyInfraWebServer1Volume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 8
+      Encrypted: false
+      AvailabilityZone: !GetAtt MyInfraWebServer1.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: MyInfraWebServer1Volume
+#    DeletionPolicy: Retain
+
+  MyInfraVolumeAttachmentToMyInfraWebServer1:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      Device: /dev/sdc
+      InstanceId: !Ref MyInfraWebServer1
+      VolumeId: !Ref MyInfraWebServer1Volume
+
 #Launching WebServer2
   MyInfraWebServer2:
     Type: AWS::EC2::Instance
@@ -222,6 +241,26 @@ Resources:
       Tags:
         - Key: Name
           Value: MyInfraWebServer2
+
+#Creating volume to a MyInfraWebServer2 instance
+  MyInfraWebServer2Volume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 8
+      Encrypted: false
+      AvailabilityZone: !GetAtt MyInfraWebServer2.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: MyInfraWebServer2Volume
+#    DeletionPolicy: Retain
+
+  MyInfraVolumeAttachmentToMyInfraWebServer2:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      Device: /dev/sdc
+      InstanceId: !Ref MyInfraWebServer2
+      VolumeId: !Ref MyInfraWebServer2Volume
+
 ############### END OF CREATION EC2 ####################
 #               END OF CREATION EC2                    #
 #               END OF CREATION EC2                    #
