@@ -1,0 +1,263 @@
+---
+AWSTemplateFormatVersion : 2010-09-09
+Description: Creating VPC using cloud formation
+Resources:
+# Create VPC
+  MyInfraVPCCI: 
+    Type: AWS::EC2::VPC
+    Properties : 
+      CidrBlock : 10.200.0.0/16
+      EnableDnsHostnames : true
+      EnableDnsSupport : true
+      InstanceTenancy : default
+      Tags :  
+        - Key: Name
+          Value: MyInfraVPCCI
+
+#Create IGW
+  MyInfraIGW: 
+    Type : AWS::EC2::InternetGateway
+    Properties : 
+        Tags :
+          - Key: Name
+            Value: MyInfraIGW
+
+#Attach IGW to VPC
+  igwattach: 
+    Type : AWS::EC2::VPCGatewayAttachment
+    Properties : 
+        VpcId : !Ref MyInfraVPCCI
+        InternetGatewayId: !Ref MyInfraIGW
+
+#Create Public Subnet
+  MyInfraPubSubCI: 
+    Type : AWS::EC2::Subnet
+    Properties : 
+      AvailabilityZone : ap-south-1a
+      CidrBlock : 10.200.0.0/24
+      MapPublicIpOnLaunch : true
+      VpcId : !Ref MyInfraVPCCI
+      Tags :
+        - Key: Name
+          Value: MyInfraPubSubCI
+
+#Create Private Subnet
+  MyInfraPrvSubCI: 
+    Type : AWS::EC2::Subnet
+    Properties : 
+      AvailabilityZone : ap-south-1b
+      CidrBlock : 10.200.1.0/24
+      VpcId : !Ref MyInfraVPCCI
+      Tags :  
+        - Key: Name 
+          Value: MyInfraPrvSubCI 
+
+#Create Public Route
+  MyInfraPubRTCI: 
+    Type : AWS::EC2::RouteTable
+    Properties: 
+      VpcId : !Ref MyInfraVPCCI
+      Tags :
+        - Key: Name
+          Value: MyInfraPubRTCI
+
+#Create Private Route
+  MyInfraPrvRTCI: 
+    Type : AWS::EC2::RouteTable
+    Properties: 
+      VpcId : !Ref MyInfraVPCCI
+      Tags :
+        - Key: Name
+          Value: MyInfraPrvRTCI 
+
+#Public Subnet Associate
+  pubsubassociate: 
+    Type : AWS::EC2::SubnetRouteTableAssociation
+    Properties : 
+      RouteTableId : !Ref MyInfraPubRTCI
+      SubnetId : !Ref MyInfraPubSubCI
+
+#Private Subnet Associate
+  prvsubassociate: 
+    Type : AWS::EC2::SubnetRouteTableAssociation
+    Properties : 
+      RouteTableId : !Ref MyInfraPrvRTCI
+      SubnetId : !Ref MyInfraPrvSubCI
+
+#Add Internet to Public Route Tabe
+  addigwtopubRT: 
+    Type : AWS::EC2::Route
+    Properties : 
+        DestinationCidrBlock : 0.0.0.0/0
+        GatewayId : !Ref MyInfraIGW
+        RouteTableId : !Ref MyInfraPubRTCI
+
+#Create Elastic IP
+  MyInfraEIPCI:
+     Type: AWS::EC2::EIP
+     Properties:
+        Domain: vpc
+
+#Create NatGateway and Attach EIP
+  MyInfraNatGatewayCI:
+     Type: AWS::EC2::NatGateway
+     Properties:
+        AllocationId:
+           Fn::GetAtt:
+           - MyInfraEIPCI
+           - AllocationId
+        SubnetId: !Ref MyInfraPubSubCI
+        Tags:
+        - Key: Name
+          Value: MyInfraNatGatewayCI
+
+#Add NatRoute to Private RT
+  MyInfraNATRouteCI:
+     Type: AWS::EC2::Route
+     Properties:
+        RouteTableId: !Ref MyInfraPrvRTCI
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId: !Ref MyInfraNatGatewayCI
+
+############### END OF CREATION VPC ####################
+#               END OF CREATION VPC                    #
+#               END OF CREATION VPC                    #
+############### END OF CREATION VPC ####################
+
+#Creating SecurityGroup to public subnet
+  MyInfraPubSGCI:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for Public Subnet from Cloudformation
+      SecurityGroupIngress:
+      -  IpProtocol: tcp
+         CidrIp: 0.0.0.0/0
+         FromPort: 22
+         ToPort: 22
+      -  IpProtocol: tcp
+         CidrIp: 0.0.0.0/0
+         FromPort: 80
+         ToPort: 80
+      Tags:
+        -  Key: Name
+           Value: MyInfraPubSGCI
+      VpcId: !Ref MyInfraVPCCI
+
+#Creating SecurityGroup to private subnet
+  MyInfraPrvSGCI:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for Private Subnet from Cloudformation
+      SecurityGroupIngress:
+      -  IpProtocol: tcp
+         CidrIp: 10.200.0.0/24
+         FromPort: 22
+         ToPort: 22
+      -  IpProtocol: icmp
+         CidrIp: 10.200.0.0/24
+         FromPort: -1
+         ToPort: -1
+      -  IpProtocol: tcp
+         CidrIp: 10.200.0.0/24
+         FromPort: 3306
+         ToPort: 3306
+      Tags:
+        -  Key: Name
+           Value: MyInfraPrvSGCI
+      VpcId: !Ref MyInfraVPCCI
+
+############### END OF CREATION SG ####################
+#               END OF CREATION SG                    #
+#               END OF CREATION SG                    #
+############### END OF CREATION SG ####################
+
+#Launching WebServer1
+  MyInfraWebServer1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0b5bff6d9495eff69
+      KeyName: myinfra
+      InstanceType: t2.micro
+      Tenancy: default
+      AvailabilityZone: ap-south-1a
+#      VpcId: !Ref MyInfraVPCCI
+      SubnetId: !Ref MyInfraPubSubCI
+      SecurityGroupIds:
+      - !Ref MyInfraPubSGCI
+      UserData:
+        'Fn::Base64': !Sub |
+            #!/bin/bash -ex
+            yum update -y
+            yum install cloud-init -y
+            yum install httpd -y
+            echo "<html><body><h1>Response from Server1</h1></body></html>" > /var/www/html/index.html
+            service httpd restart
+            chkconfig httpd on
+      Tags:
+        - Key: Name
+          Value: MyInfraWebServer1
+
+#Launching WebServer2
+  MyInfraWebServer2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0b5bff6d9495eff69
+      KeyName: myinfra
+      InstanceType: t2.micro
+      Tenancy: default
+      AvailabilityZone: ap-south-1b
+#      VpcId: !Ref MyInfraVPCCI
+      SubnetId: !Ref MyInfraPrvSubCI
+      SecurityGroupIds:
+      - !Ref MyInfraPrvSGCI
+      UserData:
+        'Fn::Base64': !Sub |
+            #!/bin/bash -ex
+            yum update -y
+            yum install cloud-init -y
+            yum install httpd -y
+            echo "<html><body><h1>Response from Server2</h1></body></html>" > /var/www/html/index.html
+            service httpd restart
+            chkconfig httpd on
+      Tags:
+        - Key: Name
+          Value: MyInfraWebServer2
+############### END OF CREATION EC2 ####################
+#               END OF CREATION EC2                    #
+#               END OF CREATION EC2                    #
+############### END OF CREATION EC2 ####################
+
+#Creating Route53
+  MyInfraRoute53:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: "MyInfra hosted zone for suniljamadar.xyz"
+      Name: suniljamadar.xyz
+# for private uncomment below section
+#      VPCs:
+#      -
+#        VPCId: !Ref MyInfraVPCCI
+#        VPCRegion: ap-south-1
+      HostedZoneTags:
+        -
+          Key: Name
+          Value: MyInfraRoute53
+
+#Creating Route53 A Record
+  MyInfraRoute53ARecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+     HostedZoneId: !Ref MyInfraRoute53
+     Comment: MyInfraRoute53 A record.
+     Name: myinfra.suniljamadar.xyz    #!Join ['', [!Ref 'Ec2Instance', ., !Ref 'AWS::Region', ., !Ref 'HostedZone', .]]
+     Type: A
+     TTL: '900'
+     ResourceRecords:
+     - !GetAtt MyInfraWebServer1.PublicIp
+
+############### END OF CREATION ROUTE53 AND A RECORD ####################
+#               END OF CREATION ROUTE53 AND A RECORD                    #
+#               END OF CREATION ROUTE53 AND A RECORD                    #
+############### END OF CREATION ROUTE53 AND A RECORD ####################
+#332622624703
